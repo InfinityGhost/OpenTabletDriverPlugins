@@ -31,17 +31,15 @@ namespace OpenTabletDriverPlugins
         protected DateTime time;
         protected Point lastpos;
         
-        private float _weight = 2.5f;
-        [SliderProperty("Weight", 0, 5, 2.5f)]
+        private float _weight;
+        [SliderProperty("Weight", 0, 10, 5f)]
         public float Weight
         {
             set => this.RaiseAndSetIfChanged(ref _weight, value);
             get => _weight;
         }
 
-        private int _resetInterval = 100;
-
-
+        private int _resetInterval;
         [SliderProperty("Reset Interval", 1, 1000, 100)]
         public int ResetInterval
         {
