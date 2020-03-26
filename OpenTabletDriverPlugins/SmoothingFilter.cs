@@ -32,7 +32,7 @@ namespace OpenTabletDriverPlugins
         protected Point lastpos;
         
         private float _weight;
-        [SliderProperty("Weight", 0, 10, 5f)]
+        [SliderProperty("Weight", 0, 5, 2.5f)]
         public float Weight
         {
             set => this.RaiseAndSetIfChanged(ref _weight, value);
