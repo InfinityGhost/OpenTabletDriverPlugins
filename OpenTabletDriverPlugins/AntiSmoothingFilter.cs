@@ -90,5 +90,7 @@ namespace OpenTabletDriverPlugins
             set => this.RaiseAndSetIfChanged(ref _compensation, value);
             get => _compensation;
         }
+
+        public FilterStage FilterStage => FilterStage.PostTranspose;
     }
 }

@@ -31,5 +31,7 @@ namespace OpenTabletDriverPlugins
             set => this.RaiseAndSetIfChanged(ref _threshold, value);
             get => _threshold;
         }
+
+        public FilterStage FilterStage => FilterStage.PostTranspose;
     }
 }
