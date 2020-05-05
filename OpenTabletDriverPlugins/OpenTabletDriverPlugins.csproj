@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="TabletDriverPlugin" Version="0.2.0" />
+    <PackageReference Include="TabletDriverPlugin" Version="0.2.1"/>
   </ItemGroup>
 
   <PropertyGroup>

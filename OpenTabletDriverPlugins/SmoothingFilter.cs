@@ -28,6 +28,8 @@ namespace OpenTabletDriverPlugins
             return pt;
         }
 
+        public FilterStage FilterStage => FilterStage.PostTranspose;
+
         protected DateTime time;
         protected Point lastpos;
         
