@@ -1,11 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="TabletDriverPlugin" Version="0.2.1"/>
+    <PackageReference Include="TabletDriverPlugin" Version="0.2.1" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy &quot;$(OutDir)OpenTabletDriverPlugins.dll&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.deps.json&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.pdb&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;" />
+  </Target>
 
 </Project>
