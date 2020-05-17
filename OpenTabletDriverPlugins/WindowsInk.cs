@@ -3,19 +3,99 @@ using System.Linq;
 using TabletDriverPlugin;
 using TabletDriverPlugin.Attributes;
 using TabletDriverPlugin.Tablet;
+using HidSharp;
+using System;
+using System.Runtime.InteropServices;
+using TabletDriverPlugin.Logging;
 
 namespace TabletDriverPlugins
 {
     [PluginName("Windows Ink")]
     public class AbsoluteInk : IAbsoluteMode
     {
-        public void Read(IDeviceReport report)
+        public IEnumerable<HidDevice> Devices => DeviceList.Local.GetHidDevices();
+        public HidDevice VirtualTablet { private set; get; }
+
+        private Boolean isOpen = false;
+
+        public virtual HidStream ReportStream { protected set; get; }
+
+        public InkReport VirtualReport;
+
+        public struct InkReport
         {
-            if (report is ITabletReport tabletReport)
-                Position(tabletReport);
+            public Byte vmultiId;
+            public Byte reportLength;
+            public Byte reportId;
+            public Byte buttons;
+            public ushort x;
+            public ushort y;
+            public ushort pressure;
         }
 
-        private Area _displayArea, _tabletArea;
+        public byte[] getBytes(InkReport str)
+        {
+            int size = Marshal.SizeOf(str);
+            byte[] arr = new byte[size];
+
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(str, ptr, true);
+            Marshal.Copy(ptr, arr, 0, size);
+            Marshal.FreeHGlobal(ptr);
+            return arr;
+        }
+
+        public void GetVirtualDevice()
+        {
+            // Connect to HID device from Vmulti
+            // Best case scenario, we dont even need vmulti, just its device
+            var matching = Devices.Where(d => d.GetMaxOutputReportLength() != 0 & d.GetMaxInputReportLength() != 0);
+            var TabletDevice = matching.FirstOrDefault(d => d.VendorID == 12267 & d.ProductID == 65535);
+
+            if (TabletDevice != null)
+            {
+                isOpen = Open(TabletDevice);
+            }
+            else
+            {
+                Log.Write("WindowsInk", "Failed to find VirtualTablet. Make sure you have the drivers installed", true);
+            }
+        }
+
+        internal bool Open(HidDevice device)
+        {
+            VirtualTablet = device;
+            if (VirtualTablet != null)
+            {
+                var config = new OpenConfiguration();
+                config.SetOption(OpenOption.Priority, OpenPriority.Low);
+                if (VirtualTablet.TryOpen(config, out var stream, out var exception))
+                {
+                    ReportStream = (HidStream)stream;
+                }
+                if (ReportStream == null)
+                {
+                    Log.Write("Detect", "Failed to open VirtualTablet. Make sure you have required permissions to open device streams.", true);
+                    return false;
+                }
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public void Read(IDeviceReport report)
+        {
+            if (!isOpen)
+                GetVirtualDevice();
+            if (isOpen)
+                if (report is ITabletReport tabletReport)
+                    Position(tabletReport);
+        }
+
+        private Area _displayArea, _tabletArea, _screenArea;
         private TabletProperties _tabletProperties;
 
         public Area Output
@@ -38,6 +118,15 @@ namespace TabletDriverPlugins
             get => _tabletArea;
         }
 
+        public Area Screen
+        {
+            set
+            {
+                _screenArea = value;
+                UpdateCache();
+            }
+            get => _screenArea;
+        }
         public TabletProperties TabletProperties
         {
             set
@@ -145,7 +234,33 @@ namespace TabletDriverPlugins
                 pos = filter.Filter(pos);
 
             // Setting cursor position
-            //Windows.SetCursorPos((int)(pos.X - _offsetX), (int)(pos.Y - _offsetY)); ;
+            //Create virtual report
+
+            double offsetX = -(32767.0 / Output.Width);
+            double offsetY = -(32767.0 / Output.Height);
+
+            var pos_x = Math.Round(pos.X / _screenArea.Width  * 32767.0 + offsetX); // need to get display size
+            var pos_y = Math.Round(pos.Y / _screenArea.Height * 32767.0 + offsetY);
+            var TipState = report.Pressure >= 1 ? 0x1 : 0x20;
+            var pressure = Math.Round(report.Pressure / TabletProperties.MaxPressure * 8191.0);
+
+            VirtualReport.vmultiId = 0x09;
+            VirtualReport.reportLength = Convert.ToByte((int)10);
+            VirtualReport.reportId = 2;
+            VirtualReport.buttons = Convert.ToByte(TipState);
+            VirtualReport.x = (ushort)pos_x;
+            VirtualReport.y = (ushort)pos_y;
+            VirtualReport.pressure = (ushort)pressure;
+
+            var OutReport = getBytes(VirtualReport);
+            try
+            {
+                ReportStream.Write(OutReport);
+            }
+            catch (Exception e)
+            {
+                Log.Write("WindowsInk", e.ToString(), true);
+            }
         }
     }
 }
