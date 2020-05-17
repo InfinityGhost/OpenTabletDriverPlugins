@@ -18,9 +18,9 @@ namespace TabletDriverPlugins
 
         private Boolean isOpen = false;
 
-        public virtual HidStream ReportStream { protected set; get; }
-
         public InkReport VirtualReport;
+
+        public virtual HidStream ReportStream { protected set; get; }
 
         public struct InkReport
         {
@@ -49,6 +49,7 @@ namespace TabletDriverPlugins
         {
             // Connect to HID device from Vmulti
             // Best case scenario, we dont even need vmulti, just its device
+            //var matching = Devices.Where(d => d.GetMaxOutputReportLength() == 65 & d.GetMaxInputReportLength() == 65);
             var matching = Devices.Where(d => d.GetMaxOutputReportLength() != 0 & d.GetMaxInputReportLength() != 0);
             var TabletDevice = matching.FirstOrDefault(d => d.VendorID == 12267 & d.ProductID == 65535);
 
@@ -95,8 +96,8 @@ namespace TabletDriverPlugins
                     Position(tabletReport);
         }
 
-        private Area _displayArea, _tabletArea, _screenArea;
-        private TabletProperties _tabletProperties;
+        public Area _displayArea, _tabletArea, _screenArea;
+        public TabletProperties _tabletProperties;
 
         public Area Output
         {
@@ -127,6 +128,7 @@ namespace TabletDriverPlugins
             }
             get => _screenArea;
         }
+
         public TabletProperties TabletProperties
         {
             set
@@ -241,12 +243,18 @@ namespace TabletDriverPlugins
 
             var pos_x = Math.Round(pos.X / _screenArea.Width  * 32767.0 + offsetX); // need to get display size
             var pos_y = Math.Round(pos.Y / _screenArea.Height * 32767.0 + offsetY);
-            var TipState = report.Pressure >= 1 ? 0x1 : 0x20;
-            var pressure = Math.Round(report.Pressure / TabletProperties.MaxPressure * 8191.0);
+            double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
+            double pressure = Math.Round(normpressure * 8191.0);
+            var TipState = report.Pressure >= 1 ? 0x21 : 0x20;
+            //var TipState = report.Raw[1] & ~0x01;
+            //if (pressure != 0)
+            //{
+            //    TipState |= 1;
+            //}
 
             VirtualReport.vmultiId = 0x09;
             VirtualReport.reportLength = Convert.ToByte((int)10);
-            VirtualReport.reportId = 2;
+            VirtualReport.reportId = Convert.ToByte((int)2);
             VirtualReport.buttons = Convert.ToByte(TipState);
             VirtualReport.x = (ushort)pos_x;
             VirtualReport.y = (ushort)pos_y;

@@ -1,12 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <Compile Remove="Driver\**" />
+    <EmbeddedResource Remove="Driver\**" />
+    <None Remove="Driver\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="HidSharpCore" Version="1.0.0" />
     <PackageReference Include="TabletDriverPlugin" Version="0.2.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Driver\" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -14,7 +16,7 @@
   </PropertyGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="xcopy &quot;$(OutDir)OpenTabletDriverPlugins.dll&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.deps.json&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.pdb&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot;&#xD;&#xA;" />
+    <Exec Command="xcopy &quot;$(OutDir)OpenTabletDriverPlugins.dll&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.deps.json&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y &#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.pdb&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y&#xD;&#xA;" />
   </Target>
 
 </Project>
