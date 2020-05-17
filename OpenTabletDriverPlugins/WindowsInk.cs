@@ -241,16 +241,18 @@ namespace TabletDriverPlugins
             double offsetX = -(32767.0 / Output.Width);
             double offsetY = -(32767.0 / Output.Height);
 
-            var pos_x = Math.Round(pos.X / _screenArea.Width  * 32767.0 + offsetX); // need to get display size
+            var pos_x = Math.Round(pos.X / _screenArea.Width  * 32767.0 + offsetX);
             var pos_y = Math.Round(pos.Y / _screenArea.Height * 32767.0 + offsetY);
             double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
             double pressure = Math.Round(normpressure * 8191.0);
-            var TipState = report.Pressure >= 1 ? 0x21 : 0x20;
-            //var TipState = report.Raw[1] & ~0x01;
-            //if (pressure != 0)
-            //{
-            //    TipState |= 1;
-            //}
+            //var TipState = report.Pressure >= 1 ? 0x21 : 0x20;
+            //var TipState = 0x20;
+            byte TipState = 0x20;
+            if (pressure != 0)
+            {
+                TipState = 0x21;
+                // 0x23 right click
+            }
 
             VirtualReport.vmultiId = 0x09;
             VirtualReport.reportLength = Convert.ToByte((int)10);
