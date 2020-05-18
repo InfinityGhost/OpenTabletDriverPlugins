@@ -3,6 +3,7 @@ using System.Linq;
 using TabletDriverPlugin;
 using TabletDriverPlugin.Attributes;
 using TabletDriverPlugin.Tablet;
+using TabletDriverPlugin.Platform.Display;
 using HidSharp;
 using System;
 using System.Runtime.InteropServices;
@@ -13,79 +14,14 @@ namespace TabletDriverPlugins
     [PluginName("Windows Ink")]
     public class AbsoluteInk : IAbsoluteMode
     {
-        public IEnumerable<HidDevice> Devices => DeviceList.Local.GetHidDevices();
-        public HidDevice VirtualTablet { private set; get; }
+        private IEnumerable<HidDevice> Devices => DeviceList.Local.GetHidDevices();
+        private HidDevice VirtualTablet { set; get; }
 
         private Boolean isOpen = false;
 
         public InkReport VirtualReport;
 
         public virtual HidStream ReportStream { protected set; get; }
-
-        public struct InkReport
-        {
-            public Byte vmultiId;
-            public Byte reportLength;
-            public Byte reportId;
-            public Byte buttons;
-            public ushort x;
-            public ushort y;
-            public ushort pressure;
-        }
-
-        public byte[] getBytes(InkReport str)
-        {
-            int size = Marshal.SizeOf(str);
-            byte[] arr = new byte[size];
-
-            IntPtr ptr = Marshal.AllocHGlobal(size);
-            Marshal.StructureToPtr(str, ptr, true);
-            Marshal.Copy(ptr, arr, 0, size);
-            Marshal.FreeHGlobal(ptr);
-            return arr;
-        }
-
-        public void GetVirtualDevice()
-        {
-            // Connect to HID device from Vmulti
-            // Best case scenario, we dont even need vmulti, just its device
-            //var matching = Devices.Where(d => d.GetMaxOutputReportLength() == 65 & d.GetMaxInputReportLength() == 65);
-            var matching = Devices.Where(d => d.GetMaxOutputReportLength() != 0 & d.GetMaxInputReportLength() != 0);
-            var TabletDevice = matching.FirstOrDefault(d => d.VendorID == 12267 & d.ProductID == 65535);
-
-            if (TabletDevice != null)
-            {
-                isOpen = Open(TabletDevice);
-            }
-            else
-            {
-                Log.Write("WindowsInk", "Failed to find VirtualTablet. Make sure you have the drivers installed", true);
-            }
-        }
-
-        internal bool Open(HidDevice device)
-        {
-            VirtualTablet = device;
-            if (VirtualTablet != null)
-            {
-                var config = new OpenConfiguration();
-                config.SetOption(OpenOption.Priority, OpenPriority.Low);
-                if (VirtualTablet.TryOpen(config, out var stream, out var exception))
-                {
-                    ReportStream = (HidStream)stream;
-                }
-                if (ReportStream == null)
-                {
-                    Log.Write("Detect", "Failed to open VirtualTablet. Make sure you have required permissions to open device streams.", true);
-                    return false;
-                }
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
 
         public void Read(IDeviceReport report)
         {
@@ -96,7 +32,8 @@ namespace TabletDriverPlugins
                     Position(tabletReport);
         }
 
-        public Area _displayArea, _tabletArea, _screenArea;
+        public Area _displayArea, _tabletArea;
+        public IDisplay _selectedDisplay;
         public TabletProperties _tabletProperties;
 
         public Area Output
@@ -119,14 +56,14 @@ namespace TabletDriverPlugins
             get => _tabletArea;
         }
 
-        public Area Screen
+        public IDisplay SelectedDisplay
         {
             set
             {
-                _screenArea = value;
+                _selectedDisplay = value;
                 UpdateCache();
             }
-            get => _screenArea;
+            get => _selectedDisplay;
         }
 
         public TabletProperties TabletProperties
@@ -171,6 +108,69 @@ namespace TabletDriverPlugins
         private float[] _rotationMatrix;
         private float _halfDisplayWidth, _halfDisplayHeight, _halfTabletWidth, _halfTabletHeight;
         private float _minX, _maxX, _minY, _maxY;
+
+        public struct InkReport
+        {
+            public Byte vmultiId;
+            public Byte reportLength;
+            public Byte reportId;
+            public Byte buttons;
+            public ushort X;
+            public ushort Y;
+            public ushort pressure;
+        }
+
+        public byte[] getBytes(InkReport str)
+        {
+            int size = Marshal.SizeOf(str);
+            byte[] arr = new byte[size];
+
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(str, ptr, true);
+            Marshal.Copy(ptr, arr, 0, size);
+            Marshal.FreeHGlobal(ptr);
+            return arr;
+        }
+
+        public void GetVirtualDevice()
+        {
+            // Connect to HID device from Vmulti
+            var matching = Devices.Where(d => d.GetMaxOutputReportLength() == 65 & d.GetMaxInputReportLength() == 65);
+            var TabletDevice = matching.FirstOrDefault(d => d.ProductID == 47820);
+
+            if (TabletDevice != null)
+            {
+                isOpen = Open(TabletDevice);
+            }
+            else
+            {
+                Log.Write("WindowsInk", "Failed to find VirtualTablet. Make sure you have the drivers installed", true);
+            }
+        }
+
+        internal bool Open(HidDevice device)
+        {
+            VirtualTablet = device;
+            if (VirtualTablet != null)
+            {
+                var config = new OpenConfiguration();
+                config.SetOption(OpenOption.Priority, OpenPriority.Low);
+                if (VirtualTablet.TryOpen(config, out var stream, out var exception))
+                {
+                    ReportStream = (HidStream)stream;
+                }
+                if (ReportStream == null)
+                {
+                    Log.Write("Detect", "Failed to open VirtualTablet. Make sure you have required permissions to open device streams.", true);
+                    return false;
+                }
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
 
         public void Position(ITabletReport report)
         {
@@ -235,37 +235,62 @@ namespace TabletDriverPlugins
             foreach (IFilter filter in _postFilters)
                 pos = filter.Filter(pos);
 
-            // Setting cursor position
-            //Create virtual report
-
+            // Setting report position based on Logical Maximum
             double offsetX = -(32767.0 / Output.Width);
             double offsetY = -(32767.0 / Output.Height);
 
-            var pos_x = Math.Round(pos.X / _screenArea.Width  * 32767.0 + offsetX);
-            var pos_y = Math.Round(pos.Y / _screenArea.Height * 32767.0 + offsetY);
+            var pos_x = Math.Round(pos.X / _selectedDisplay.Width * 32767.0 + offsetX);
+            var pos_y = Math.Round(pos.Y / _selectedDisplay.Height * 32767.0 + offsetY);
+
+            // Clipping to logical bounds
+            if (pos_x < 0)
+                pos_x = 0;
+            if (pos_x > 32767.0)
+                pos_x = 32767;
+            if (pos_y < 0)
+                pos_y = 0;
+            if (pos_y > 32767.0)
+                pos_y = 32767;
+
+            // Create virtual report
             double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
             double pressure = Math.Round(normpressure * 8191.0);
-            //var TipState = report.Pressure >= 1 ? 0x21 : 0x20;
-            //var TipState = 0x20;
-            byte TipState = 0x20;
-            if (pressure != 0)
+            int tipState = 0;
+            tipState |= 1 << 4;
+            // bit position - function
+            // 0 - press
+            // 1 - barrel
+            // 2 - eraser
+            // 3 - Invert
+            // 4 - range
+            var erasing = false;
+            // we need to send an out of range report when switching to and from eraser mode
+            // this should be implemented in the binding process
+
+            if (erasing)
             {
-                TipState = 0x21;
-                // 0x23 right click
+                tipState |= 1 << 3; 
             }
 
-            VirtualReport.vmultiId = 0x09;
-            VirtualReport.reportLength = Convert.ToByte((int)10);
-            VirtualReport.reportId = Convert.ToByte((int)2);
-            VirtualReport.buttons = Convert.ToByte(TipState);
-            VirtualReport.x = (ushort)pos_x;
-            VirtualReport.y = (ushort)pos_y;
-            VirtualReport.pressure = (ushort)pressure;
+            if (pressure != 0)
+            {
+                tipState = erasing ? tipState | (1 << 0) : tipState | (1 << 2);
+            }
 
-            var OutReport = getBytes(VirtualReport);
+            var virtualReport = new InkReport
+            {
+                vmultiId = 0x40,
+                reportLength = 0XA,
+                reportId = 0X5,
+                buttons = (byte)tipState,
+                X = (ushort)pos_x,
+                Y = (ushort)pos_y,
+                pressure = (ushort)pressure
+            };
+
             try
             {
-                ReportStream.Write(OutReport);
+                ReportStream.Write(getBytes(virtualReport));
             }
             catch (Exception e)
             {

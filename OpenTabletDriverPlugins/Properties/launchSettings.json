@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "OpenTabletDriverPlugins": {
-      "commandName": "Executable",
-      "executablePath": "C:\\Users\\fabio\\Fabio\\Programing\\OpenTabletDriver\\OpenTabletDriver\\bin\\Debug\\netcoreapp3.1\\OpenTabletDriver.exe",
-      "commandLineArgs": "-c C:\\Users\\fabio\\Fabio\\Programing\\OpenTabletDriver\\TabletDriverLib\\Configurations"
-    }
-  }
-}
