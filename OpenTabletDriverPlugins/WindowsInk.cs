@@ -19,8 +19,6 @@ namespace TabletDriverPlugins
 
         private Boolean isOpen = false;
 
-        public InkReport VirtualReport;
-
         public virtual HidStream ReportStream { protected set; get; }
 
         public void Read(IDeviceReport report)
@@ -120,7 +118,7 @@ namespace TabletDriverPlugins
             public ushort pressure;
         }
 
-        public byte[] getBytes(InkReport str)
+        public byte[] GetBytes(InkReport str)
         {
             int size = Marshal.SizeOf(str);
             byte[] arr = new byte[size];
@@ -136,11 +134,11 @@ namespace TabletDriverPlugins
         {
             // Connect to HID device from Vmulti
             var matching = Devices.Where(d => d.GetMaxOutputReportLength() == 65 & d.GetMaxInputReportLength() == 65);
-            var TabletDevice = matching.FirstOrDefault(d => d.ProductID == 47820);
+            var tabletDevice = matching.FirstOrDefault(d => d.ProductID == 47820);
 
-            if (TabletDevice != null)
+            if (tabletDevice != null)
             {
-                isOpen = Open(TabletDevice);
+                isOpen = Open(tabletDevice);
             }
             else
             {
@@ -155,7 +153,7 @@ namespace TabletDriverPlugins
             {
                 var config = new OpenConfiguration();
                 config.SetOption(OpenOption.Priority, OpenPriority.Low);
-                if (VirtualTablet.TryOpen(config, out var stream, out var exception))
+                if (VirtualTablet.TryOpen(config, out var stream, out _))
                 {
                     ReportStream = (HidStream)stream;
                 }
@@ -290,7 +288,7 @@ namespace TabletDriverPlugins
 
             try
             {
-                ReportStream.Write(getBytes(virtualReport));
+                ReportStream.Write(GetBytes(virtualReport));
             }
             catch (Exception e)
             {
