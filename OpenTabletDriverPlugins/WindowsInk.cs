@@ -8,6 +8,7 @@ using HidSharp;
 using System;
 using System.Runtime.InteropServices;
 using TabletDriverPlugin.Logging;
+using System.Runtime.CompilerServices;
 
 namespace TabletDriverPlugins
 {
@@ -59,7 +60,6 @@ namespace TabletDriverPlugins
             set
             {
                 _selectedDisplay = value;
-                UpdateCache();
             }
             get => _selectedDisplay;
         }
@@ -107,7 +107,7 @@ namespace TabletDriverPlugins
         private float _halfDisplayWidth, _halfDisplayHeight, _halfTabletWidth, _halfTabletHeight;
         private float _minX, _maxX, _minY, _maxY;
 
-        public struct InkReport
+        private struct InkReport
         {
             public Byte vmultiId;
             public Byte reportLength;
@@ -118,7 +118,7 @@ namespace TabletDriverPlugins
             public ushort pressure;
         }
 
-        public byte[] GetBytes(InkReport str)
+        private byte[] GetBytes(InkReport str)
         {
             int size = Marshal.SizeOf(str);
             byte[] arr = new byte[size];
@@ -171,46 +171,25 @@ namespace TabletDriverPlugins
         }
 
 
-        // TODO: FIX THIS NAMING MESS OH GOD WHAT HAVE I CREATED
-        private static PenBindingHandler _PenBindingHandlerHandler;
+        private static BindingHandler _InkBindingHandler;
 
-        public static PenBindingHandler PenBindingHandlerHandler
+        public static BindingHandler InkBindingHandler
         {
             get
             {
-                if (_PenBindingHandlerHandler == null)
+                if (_InkBindingHandler == null)
                 {
-                    _PenBindingHandlerHandler = new PenBindingHandler();
+                    _InkBindingHandler = new BindingHandler();
                 }
-                return _PenBindingHandlerHandler;
+                return _InkBindingHandler;
             }
         }
-        public class PenBindingHandler
+        public class BindingHandler
         {
             private void KeyPress(string key, bool isPress)
             {
-                if (key == "Eraser")
-                {
-                    KeyToggle("EraserToggle", true);
-                    KeyToggle("EraserToggle", false);
-                }
-                else
-                {
-                    PenKeys[key] = isPress;
-
-                }
-            }
-
-            public void Press(string key)
-            {
-                if (!key.Contains("Toggle"))
-                {
-                    KeyPress(key, true);
-                }
-                else
-                {
-                    KeyToggle(key, true);
-                }
+                PenKeys[key] = isPress;
+                PenStatus["Lift-Out"] = true;
             }
 
             public void KeyToggle(string key, bool isPressed)
@@ -220,20 +199,30 @@ namespace TabletDriverPlugins
                 if (isPressed & !PenKeys[key] )
                 {
                     PenKeys[newkey] = !PenKeys[newkey];
-                    PenKeys["Lift"] = true;
+                    PenStatus["Lift-Out"] = true;
                 }
                 PenKeys[key] = isPressed;
             }
-
-            public void Release(string key)
+            public void Press(string key)
             {
-                if (!key.Contains("Toggle"))
+                if (key.Contains("Toggle"))
                 {
-                    KeyPress(key, false);
+                    KeyToggle(key, true);
                 }
                 else
                 {
+                    KeyPress(key, true);
+                }
+            }
+            public void Release(string key)
+            {
+                if (key.Contains("Toggle"))
+                {
                     KeyToggle(key, false);
+                }
+                else
+                {
+                    KeyPress(key, false);
                 }
             }
 
@@ -243,7 +232,13 @@ namespace TabletDriverPlugins
                 {"EraserToggle", false},
                 {"Barrel", false},
                 {"BarrelToggle", false},
-                {"Lift", false},
+            };
+
+            public Dictionary<string, bool> PenStatus = new Dictionary<string, bool>
+            {
+                {"Lift-Out", false},
+                {"Lift-In", false},
+                {"OutRange", false},
             };
 
             public List<string> Supportedkeys = new List<string>
@@ -396,35 +391,71 @@ namespace TabletDriverPlugins
             // Create virtual report
             double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
             double pressure = Math.Round(normpressure * 8191.0);
-            int tipState = 0;
-            if (!PenBindingHandlerHandler.PenKeys["Lift"])
-            {
-                tipState |= 1 << 4;
-            }
-            PenBindingHandlerHandler.PenKeys["Lift"] = false;
             // bit position - function
             // 0 - press
             // 1 - barrel
             // 2 - eraser
             // 3 - Invert
             // 4 - range
-            var erasing = PenBindingHandlerHandler.PenKeys["Eraser"];
             // we need to send an out of range report when switching to and from eraser mode
             // this should be implemented in the binding process
 
-            if (erasing)
+            Dictionary<string, int> bitPos = new Dictionary<string, int>
             {
-                tipState |= 1 << 3; 
+                {"Press", 0},
+                {"Barrel", 1},
+                {"Eraser", 2},
+                {"Invert", 3},
+                {"InRange", 4},
+            };
+
+            int tipState = 0;
+            if (InkBindingHandler.PenStatus["OutRange"])
+            {
+                pressure = 0;
+                InkBindingHandler.PenStatus["OutRange"] = false;
+                InkBindingHandler.PenStatus["Lift-In"] = true;
+            }
+            else if (InkBindingHandler.PenStatus["Lift-Out"])
+            {
+                pressure = 0;
+                tipState |= 1 << bitPos["InRange"];
+                InkBindingHandler.PenStatus["OutRange"] = true;
+                InkBindingHandler.PenStatus["Lift-Out"] = false;
+            }
+            else if (InkBindingHandler.PenStatus["Lift-In"])
+            {
+                pressure = 0;
+                tipState |= 1 << bitPos["InRange"];
+                InkBindingHandler.PenStatus["Lift-In"] = false;
+            }
+            else
+            {
+                tipState |= 1 << bitPos["InRange"];
+
             }
 
-            if (PenBindingHandlerHandler.PenKeys["Barrel"])
+            if (InkBindingHandler.PenKeys["Eraser"])
             {
-                tipState |= 1 << 1;
+                tipState |= 1 << bitPos["Invert"]; 
+            }
+
+            if (InkBindingHandler.PenKeys["Barrel"])
+            {
+                tipState |= 1 << bitPos["Barrel"];
             }
 
             if (pressure != 0)
             {
-                tipState = erasing ? tipState | (1 << 2) : tipState | (1 << 0);
+                if (InkBindingHandler.PenKeys["Eraser"])
+                {
+                    tipState |= 1 << bitPos["Eraser"];
+                }
+                else
+                {
+                    tipState |= 1 << bitPos["Press"];
+
+                }
             }
 
             var virtualReport = new InkReport
@@ -449,14 +480,14 @@ namespace TabletDriverPlugins
         }
     }
 
-    [PluginName("Pen Binding")]
-    public class PenBinding : IBinding
+    [PluginName("InkBinding")]
+    public class InkBinding : IBinding
     {
         public string Name
         {
             get
             {
-                return nameof(PenBinding) + ": " + Property;
+                return nameof(InkBinding) + ": " + Property;
             }
         }
 
@@ -467,7 +498,7 @@ namespace TabletDriverPlugins
         {
             get
             {
-                AbsoluteInk.PenBindingHandler PenHandler = AbsoluteInk.PenBindingHandlerHandler;
+                AbsoluteInk.BindingHandler PenHandler = AbsoluteInk.InkBindingHandler;
                 return () => PenHandler.Press(Property);
             }
         }
@@ -476,7 +507,7 @@ namespace TabletDriverPlugins
         {
             get
             {
-                AbsoluteInk.PenBindingHandler PenHandler = AbsoluteInk.PenBindingHandlerHandler;
+                AbsoluteInk.BindingHandler PenHandler = AbsoluteInk.InkBindingHandler;
                 return () => PenHandler.Release(Property);
             }
         }
