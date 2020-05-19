@@ -3,5 +3,3 @@
 */nupkg
 .vscode/
 .vs/
-launchSettings.json
-OpenTabletDriverPlugins/Driver/

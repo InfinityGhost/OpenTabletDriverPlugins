@@ -424,7 +424,7 @@ namespace TabletDriverPlugins
 
             if (pressure != 0)
             {
-                tipState = erasing ? tipState | (1 << 0) : tipState | (1 << 2);
+                tipState = erasing ? tipState | (1 << 2) : tipState | (1 << 0);
             }
 
             var virtualReport = new InkReport
