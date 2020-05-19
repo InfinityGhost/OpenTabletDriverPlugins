@@ -269,17 +269,6 @@ namespace TabletDriverPlugins
 
         private void HandlePenBinding(ITabletReport report)
         {
-            if (TipBinding != null && TipActivationPressure != 0)
-            {
-                float pressurePercent = (float)report.Pressure / TabletProperties.MaxPressure * 100f;
-
-                if (pressurePercent >= TipActivationPressure && !TipState)
-                    TipBinding.Press();
-                else if (pressurePercent < TipActivationPressure && TipState)
-                    TipBinding.Release();
-                TipState = pressurePercent >= TipActivationPressure;
-            }
-
             for (var penButton = 0; penButton < 2; penButton++)
             {
                 if (PenButtonBindings.TryGetValue(penButton, out var binding) && binding != null)
