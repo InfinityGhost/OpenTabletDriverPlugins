@@ -12,7 +12,7 @@ using TabletDriverPlugin.Logging;
 namespace TabletDriverPlugins
 {
     [PluginName("Windows Ink")]
-    public class AbsoluteInk : IAbsoluteMode
+    public class AbsoluteInk : IBindingHandler<IBinding>, IAbsoluteMode
     {
         private IEnumerable<HidDevice> Devices => DeviceList.Local.GetHidDevices();
         private HidDevice VirtualTablet { set; get; }
@@ -170,6 +170,149 @@ namespace TabletDriverPlugins
             }
         }
 
+
+        // TODO: FIX THIS NAMING MESS OH GOD WHAT HAVE I CREATED
+        private static PenBindingHandler _PenBindingHandlerHandler;
+
+        public static PenBindingHandler PenBindingHandlerHandler
+        {
+            get
+            {
+                if (_PenBindingHandlerHandler == null)
+                {
+                    _PenBindingHandlerHandler = new PenBindingHandler();
+                }
+                return _PenBindingHandlerHandler;
+            }
+        }
+        public class PenBindingHandler
+        {
+            private void KeyPress(string key, bool isPress)
+            {
+                if (key == "Eraser")
+                {
+                    KeyToggle("EraserToggle", true);
+                    KeyToggle("EraserToggle", false);
+                }
+                else
+                {
+                    PenKeys[key] = isPress;
+
+                }
+            }
+
+            public void Press(string key)
+            {
+                if (!key.Contains("Toggle"))
+                {
+                    KeyPress(key, true);
+                }
+                else
+                {
+                    KeyToggle(key, true);
+                }
+            }
+
+            public void KeyToggle(string key, bool isPressed)
+            {
+                
+                var newkey = key.Replace("Toggle", "");
+                if (isPressed & !PenKeys[key] )
+                {
+                    PenKeys[newkey] = !PenKeys[newkey];
+                    PenKeys["Lift"] = true;
+                }
+                PenKeys[key] = isPressed;
+            }
+
+            public void Release(string key)
+            {
+                if (!key.Contains("Toggle"))
+                {
+                    KeyPress(key, false);
+                }
+                else
+                {
+                    KeyToggle(key, false);
+                }
+            }
+
+            public Dictionary<string, bool> PenKeys = new Dictionary<string, bool>
+            {
+                {"Eraser", false},
+                {"EraserToggle", false},
+                {"Barrel", false},
+                {"BarrelToggle", false},
+                {"Lift", false},
+            };
+
+            public List<string> Supportedkeys = new List<string>
+            {
+                {"Eraser"},
+                {"EraserToggle"},
+                {"Barrel"},
+                {"BarrelToggle"},
+            };
+        }
+
+        public float TipActivationPressure { set; get; }
+        public IBinding TipBinding { set; get; } = null;
+        public Dictionary<int, IBinding> PenButtonBindings { set; get; } = new Dictionary<int, IBinding>();
+        public Dictionary<int, IBinding> AuxButtonBindings { set; get; } = new Dictionary<int, IBinding>();
+
+        private bool TipState = false;
+        private IList<bool> PenButtonStates = new bool[2];
+        private IList<bool> AuxButtonStates = new bool[6];
+
+        public void HandleBinding(IDeviceReport report)
+        {
+            if (report is ITabletReport tabletReport && tabletReport.ReportID >= TabletProperties.ActiveReportID)
+                HandlePenBinding(tabletReport);
+            if (report is IAuxReport auxReport)
+                HandleAuxBinding(auxReport);
+        }
+
+        private void HandlePenBinding(ITabletReport report)
+        {
+            if (TipBinding != null && TipActivationPressure != 0)
+            {
+                float pressurePercent = (float)report.Pressure / TabletProperties.MaxPressure * 100f;
+
+                if (pressurePercent >= TipActivationPressure && !TipState)
+                    TipBinding.Press();
+                else if (pressurePercent < TipActivationPressure && TipState)
+                    TipBinding.Release();
+                TipState = pressurePercent >= TipActivationPressure;
+            }
+
+            for (var penButton = 0; penButton < 2; penButton++)
+            {
+                if (PenButtonBindings.TryGetValue(penButton, out var binding) && binding != null)
+                {
+                    if (report.PenButtons[penButton] && !PenButtonStates[penButton])
+                        binding.Press();
+                    else if (!report.PenButtons[penButton] && PenButtonStates[penButton])
+                        binding.Release();
+                }
+                PenButtonStates[penButton] = report.PenButtons[penButton];
+            }
+        }
+
+        private void HandleAuxBinding(IAuxReport report)
+        {
+            for (var auxButton = 0; auxButton < 6; auxButton++)
+            {
+                if (AuxButtonBindings.TryGetValue(auxButton, out var binding) && binding != null)
+                {
+                    if (report.AuxButtons[auxButton] && !AuxButtonStates[auxButton])
+                        binding.Press();
+                    else if (!report.AuxButtons[auxButton] && AuxButtonStates[auxButton])
+                        binding.Release();
+                }
+                AuxButtonStates[auxButton] = report.AuxButtons[auxButton];
+            }
+        }
+
         public void Position(ITabletReport report)
         {
             if (TabletProperties.ActiveReportID != 0 && report.ReportID <= TabletProperties.ActiveReportID)
@@ -254,20 +397,29 @@ namespace TabletDriverPlugins
             double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
             double pressure = Math.Round(normpressure * 8191.0);
             int tipState = 0;
-            tipState |= 1 << 4;
+            if (!PenBindingHandlerHandler.PenKeys["Lift"])
+            {
+                tipState |= 1 << 4;
+            }
+            PenBindingHandlerHandler.PenKeys["Lift"] = false;
             // bit position - function
             // 0 - press
             // 1 - barrel
             // 2 - eraser
             // 3 - Invert
             // 4 - range
-            var erasing = false;
+            var erasing = PenBindingHandlerHandler.PenKeys["Eraser"];
             // we need to send an out of range report when switching to and from eraser mode
             // this should be implemented in the binding process
 
             if (erasing)
             {
                 tipState |= 1 << 3; 
+            }
+
+            if (PenBindingHandlerHandler.PenKeys["Barrel"])
+            {
+                tipState |= 1 << 1;
             }
 
             if (pressure != 0)
@@ -295,5 +447,40 @@ namespace TabletDriverPlugins
                 Log.Write("WindowsInk", e.ToString(), true);
             }
         }
+    }
+
+    [PluginName("Pen Binding")]
+    public class PenBinding : IBinding
+    {
+        public string Name
+        {
+            get
+            {
+                return nameof(PenBinding) + ": " + Property;
+            }
+        }
+
+        public string Property { set; get; }
+
+        // TODO: FIX THE NAMING MESS...
+        public Action Press
+        {
+            get
+            {
+                AbsoluteInk.PenBindingHandler PenHandler = AbsoluteInk.PenBindingHandlerHandler;
+                return () => PenHandler.Press(Property);
+            }
+        }
+
+        public Action Release
+        {
+            get
+            {
+                AbsoluteInk.PenBindingHandler PenHandler = AbsoluteInk.PenBindingHandlerHandler;
+                return () => PenHandler.Release(Property);
+            }
+        }
+
+        public override string ToString() => Name;
     }
 }
