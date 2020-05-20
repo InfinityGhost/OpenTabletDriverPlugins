@@ -107,15 +107,16 @@ namespace TabletDriverPlugins
         private float _halfDisplayWidth, _halfDisplayHeight, _halfTabletWidth, _halfTabletHeight;
         private float _minX, _maxX, _minY, _maxY;
 
+        // HID report structure for XP-Pen drivers. They are used to send windows ink information to windows
         private struct InkReport
         {
-            public Byte vmultiId;
-            public Byte reportLength;
-            public Byte reportId;
-            public Byte buttons;
-            public ushort X;
-            public ushort Y;
-            public ushort pressure;
+            public Byte vmultiId;       // ID to communicate to the Digitizer device
+            public Byte reportLength;   // Size of the report in bytes.
+            public Byte reportId;       // ID of the report. not 100% sure. i think it to report if its active or idle
+            public Byte buttons;        // Byte with switches for pen buttons / states
+            public ushort X;            // X position of the pen from 0 to 32767
+            public ushort Y;            // Y position of the pen from 0 to 32767
+            public ushort pressure;     // Pressure level from 0 to 8191
         }
 
         private byte[] GetBytes(InkReport str)
@@ -132,7 +133,7 @@ namespace TabletDriverPlugins
 
         public void GetVirtualDevice()
         {
-            // Connect to HID device from Vmulti
+            // Connect to HID device from XP-Pen drivers
             var matching = Devices.Where(d => d.GetMaxOutputReportLength() == 65 & d.GetMaxInputReportLength() == 65);
             var tabletDevice = matching.FirstOrDefault(d => d.ProductID == 47820);
 
@@ -159,7 +160,7 @@ namespace TabletDriverPlugins
                 }
                 if (ReportStream == null)
                 {
-                    Log.Write("Detect", "Failed to open VirtualTablet. Make sure you have required permissions to open device streams.", true);
+                    Log.Write("WindowsInk", "Failed to open VirtualTablet. Make sure you have required permissions to open device streams.", true);
                     return false;
                 }
                 return true;
@@ -189,7 +190,7 @@ namespace TabletDriverPlugins
             private void KeyPress(string key, bool isPress)
             {
                 PenKeys[key] = isPress;
-                PenStatus["Lift-Out"] = true;
+                PenStatus = "Lift-Out";
             }
 
             public void KeyToggle(string key, bool isPressed)
@@ -199,12 +200,17 @@ namespace TabletDriverPlugins
                 if (isPressed & !PenKeys[key] )
                 {
                     PenKeys[newkey] = !PenKeys[newkey];
-                    PenStatus["Lift-Out"] = true;
+                    PenStatus = "Lift-Out";
                 }
                 PenKeys[key] = isPressed;
             }
             public void Press(string key)
             {
+                if (Supportedkeys.Contains(key))
+                {
+                    Log.Write("WindowsInk", "Unsuported key pressed");
+                    return;
+                }
                 if (key.Contains("Toggle"))
                 {
                     KeyToggle(key, true);
@@ -216,6 +222,11 @@ namespace TabletDriverPlugins
             }
             public void Release(string key)
             {
+                if (Supportedkeys.Contains(key))
+                {
+                    Log.Write("WindowsInk", "Unsuported key pressed");
+                    return;
+                }
                 if (key.Contains("Toggle"))
                 {
                     KeyToggle(key, false);
@@ -234,12 +245,7 @@ namespace TabletDriverPlugins
                 {"BarrelToggle", false},
             };
 
-            public Dictionary<string, bool> PenStatus = new Dictionary<string, bool>
-            {
-                {"Lift-Out", false},
-                {"Lift-In", false},
-                {"OutRange", false},
-            };
+            public string PenStatus = "";
 
             public List<string> Supportedkeys = new List<string>
             {
@@ -250,7 +256,8 @@ namespace TabletDriverPlugins
             };
         }
 
-        public float TipActivationPressure { set; get; }
+        // Not really used, WindowsInk expects a touch on pressure > 0. Need to keep it because we inherit IAbsoluteMode
+        public float TipActivationPressure { set; get; } 
         public IBinding TipBinding { set; get; } = null;
         public Dictionary<int, IBinding> PenButtonBindings { set; get; } = new Dictionary<int, IBinding>();
         public Dictionary<int, IBinding> AuxButtonBindings { set; get; } = new Dictionary<int, IBinding>();
@@ -363,8 +370,7 @@ namespace TabletDriverPlugins
             double offsetX = -(32767.0 / Output.Width);
             double offsetY = -(32767.0 / Output.Height);
 
-
-
+            // Move from pixel positioning to windows ink positioning (0 to 32767)
             var pos_x = Math.Round(pos.X / _virtualScreen.Width * 32767.0 + offsetX);
             var pos_y = Math.Round(pos.Y / _virtualScreen.Height * 32767.0 + offsetY);
 
@@ -378,8 +384,9 @@ namespace TabletDriverPlugins
             if (pos_y > 32767.0)
                 pos_y = 32767;
 
-            // Create virtual report
+            // Normalize pressure
             double normpressure = (double)report.Pressure / (double)TabletProperties.MaxPressure;
+            // Expand pressure to fit driver supported pressure levels
             double pressure = Math.Round(normpressure * 8191.0);
             // bit position - function
             // 0 - press
@@ -387,8 +394,6 @@ namespace TabletDriverPlugins
             // 2 - eraser
             // 3 - Invert
             // 4 - range
-            // we need to send an out of range report when switching to and from eraser mode
-            // this should be implemented in the binding process
 
             Dictionary<string, int> bitPos = new Dictionary<string, int>
             {
@@ -400,31 +405,31 @@ namespace TabletDriverPlugins
             };
 
             int tipState = 0;
-            if (InkBindingHandler.PenStatus["OutRange"])
+            // We need to send an out of range report when switching to and from eraser mode. 
+            // To satisfy windows completely we will lift the pen, exit ranhe, hover again, and then touch.
+            // https://docs.microsoft.com/en-us/windows-hardware/design/component-guidelines/windows-pen-states
+            switch (InkBindingHandler.PenStatus)
             {
-                pressure = 0;
-                InkBindingHandler.PenStatus["OutRange"] = false;
-                InkBindingHandler.PenStatus["Lift-In"] = true;
+                case "Lift-Out":
+                    pressure = 0;
+                    tipState |= 1 << bitPos["InRange"];
+                    InkBindingHandler.PenStatus = "OutRange";
+                    break;
+                case "OutRange":
+                    pressure = 0;
+                    InkBindingHandler.PenStatus = "Lift-In";
+                    break;
+                case "Lift-In":
+                    pressure = 0;
+                    tipState |= 1 << bitPos["InRange"];
+                    InkBindingHandler.PenStatus = "";
+                    break;
+                default:
+                    tipState |= 1 << bitPos["InRange"];
+                    break;
             }
-            else if (InkBindingHandler.PenStatus["Lift-Out"])
-            {
-                pressure = 0;
-                tipState |= 1 << bitPos["InRange"];
-                InkBindingHandler.PenStatus["OutRange"] = true;
-                InkBindingHandler.PenStatus["Lift-Out"] = false;
-            }
-            else if (InkBindingHandler.PenStatus["Lift-In"])
-            {
-                pressure = 0;
-                tipState |= 1 << bitPos["InRange"];
-                InkBindingHandler.PenStatus["Lift-In"] = false;
-            }
-            else
-            {
-                tipState |= 1 << bitPos["InRange"];
 
-            }
-
+            // Setting button bit switches
             if (InkBindingHandler.PenKeys["Eraser"])
             {
                 tipState |= 1 << bitPos["Invert"]; 
@@ -448,6 +453,7 @@ namespace TabletDriverPlugins
                 }
             }
 
+            // Setting the report values
             var virtualReport = new InkReport
             {
                 vmultiId = 0x40,
@@ -483,7 +489,6 @@ namespace TabletDriverPlugins
 
         public string Property { set; get; }
 
-        // TODO: FIX THE NAMING MESS...
         public Action Press
         {
             get
