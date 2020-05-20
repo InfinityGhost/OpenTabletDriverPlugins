@@ -32,7 +32,7 @@ namespace TabletDriverPlugins
         }
 
         public Area _displayArea, _tabletArea;
-        public IDisplay _selectedDisplay;
+        public IVirtualScreen _virtualScreen;
         public TabletProperties _tabletProperties;
 
         public Area Output
@@ -55,13 +55,13 @@ namespace TabletDriverPlugins
             get => _tabletArea;
         }
 
-        public IDisplay SelectedDisplay
+        public IVirtualScreen VirtualScreen
         {
             set
             {
-                _selectedDisplay = value;
+                _virtualScreen = value;
             }
-            get => _selectedDisplay;
+            get => _virtualScreen;
         }
 
         public TabletProperties TabletProperties
@@ -255,7 +255,6 @@ namespace TabletDriverPlugins
         public Dictionary<int, IBinding> PenButtonBindings { set; get; } = new Dictionary<int, IBinding>();
         public Dictionary<int, IBinding> AuxButtonBindings { set; get; } = new Dictionary<int, IBinding>();
 
-        private bool TipState = false;
         private IList<bool> PenButtonStates = new bool[2];
         private IList<bool> AuxButtonStates = new bool[6];
 
@@ -364,8 +363,10 @@ namespace TabletDriverPlugins
             double offsetX = -(32767.0 / Output.Width);
             double offsetY = -(32767.0 / Output.Height);
 
-            var pos_x = Math.Round(pos.X / _selectedDisplay.Width * 32767.0 + offsetX);
-            var pos_y = Math.Round(pos.Y / _selectedDisplay.Height * 32767.0 + offsetY);
+
+
+            var pos_x = Math.Round(pos.X / _virtualScreen.Width * 32767.0 + offsetX);
+            var pos_y = Math.Round(pos.Y / _virtualScreen.Height * 32767.0 + offsetY);
 
             // Clipping to logical bounds
             if (pos_x < 0)
