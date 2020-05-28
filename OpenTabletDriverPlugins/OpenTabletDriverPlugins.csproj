@@ -2,15 +2,12 @@
 
   <ItemGroup>
     <PackageReference Include="HidSharpCore" Version="1.0.0" />
-    <PackageReference Include="TabletDriverPlugin" Version="0.2.1" />
+    <ProjectReference Include="..\..\OpenTabletDriver\TabletDriverLib\TabletDriverLib.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="xcopy &quot;$(OutDir)OpenTabletDriverPlugins.dll&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y&#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.deps.json&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y &#xD;&#xA;xcopy &quot;$(OutDir)OpenTabletDriverPlugins.pdb&quot; &quot;%25appdata%25\..\Local\OpenTabletDriver\Plugins&quot; /Y&#xD;&#xA;" />
-  </Target>
 
 </Project>
