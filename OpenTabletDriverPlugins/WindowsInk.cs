@@ -25,8 +25,8 @@ namespace TabletDriverPlugins
         private const float LogicalMaximum = 32767.0f;
         
         private Area _displayArea, _tabletArea;
+        public virtual TabletProperties TabletProperties { set; get; }
         private IVirtualScreen _virtualScreen;
-        private TabletProperties _tabletProperties;
         private bool isOpen = false;
         private float[] _rotationMatrix;
         private float _halfDisplayWidth, _halfDisplayHeight, _halfTabletWidth, _halfTabletHeight;
@@ -62,16 +62,6 @@ namespace TabletDriverPlugins
                 _virtualScreen = value;
             }
             get => _virtualScreen;
-        }
-
-        public TabletProperties TabletProperties
-        {
-            set
-            {
-                _tabletProperties = value;
-                UpdateCache();
-            }
-            get => _tabletProperties;
         }
 
         private IEnumerable<IFilter> _filters, _preFilters, _postFilters;
@@ -209,7 +199,7 @@ namespace TabletDriverPlugins
             if (TabletProperties.ActiveReportID != 0 && report.ReportID <= TabletProperties.ActiveReportID)
                 return;
 
-            var pos = new Point(report.Position.X, report.Position.Y);
+            var pos = new TabletDriverPlugin.Point(report.Position.X, report.Position.Y);
 
             // Pre Filter
             foreach (IFilter filter in _preFilters)
@@ -229,7 +219,7 @@ namespace TabletDriverPlugins
             // Rotation
             if (Input.Rotation != 0f)
             {
-                var tempCopy = new Point(pos.X, pos.Y);
+                var tempCopy = new TabletDriverPlugin.Point(pos.X, pos.Y);
                 pos.X = (tempCopy.X * _rotationMatrix[0]) + (tempCopy.Y * _rotationMatrix[1]);
                 pos.Y = (tempCopy.X * _rotationMatrix[2]) + (tempCopy.Y * _rotationMatrix[3]);
             }
