@@ -1,7 +1,8 @@
 using System;
-using TabletDriverPlugin;
-using TabletDriverPlugin.Attributes;
-using TabletDriverPlugin.Tablet;
+using System.Numerics;
+using OpenTabletDriver.Plugin;
+using OpenTabletDriver.Plugin.Attributes;
+using OpenTabletDriver.Plugin.Tablet;
 
 namespace OpenTabletDriverPlugins
 {
@@ -10,7 +11,7 @@ namespace OpenTabletDriverPlugins
     [PluginName("Anti-Smoothing")]
     public class AntiSmoothingFilter : Notifier, IFilter
     {
-        public Point Filter(Point point)
+        public Vector2 Filter(Vector2 point)
         {
             TimeSpan timeDelta = _lastTime - DateTime.Now;
             
@@ -23,18 +24,21 @@ namespace OpenTabletDriverPlugins
             }
             _lastTime = DateTime.Now;
 
-            float velocity = point.DistanceFrom(_lastPoint ?? point);
+            float velocity = Vector2.Distance(point, _lastPoint ?? point);
             float acceleration = (velocity - _oldVelocity) * _reportRate;
 
             if (velocity < 1)
+            {
+                _lastPoint = point;
                 return point;
+            }
             
             float predictedVelocity = velocity + acceleration / _reportRate;
 
-            Point predicted;
+            Vector2 predicted;
             if (velocity > 0.1 && predictedVelocity > 0.1 && velocity < 2000 && predictedVelocity < 2000)
             {
-                predicted = new Point(_lastPoint.X, _lastPoint.Y);
+                predicted = new Vector2(_lastPoint.Value.X, _lastPoint.Value.Y);
                 double shapedVelocityFactor = Pow(predictedVelocity / velocity, Shape) * Compensation;
 
                 predicted.X += (float)(point.X + shapedVelocityFactor * Compensation * (_reportRate / 1000f));
@@ -64,32 +68,19 @@ namespace OpenTabletDriverPlugins
         }
 
 
-        private Point _lastPoint = null;
+        private Vector2? _lastPoint = null;
         private DateTime _lastTime = DateTime.Now;
         private float _reportRate, _reportRateAvg, _oldVelocity;
 
-        private float _velocity, _shape, _compensation;
 
         [UnitProperty("Velocity", "px/s")]
-        public float Velocity
-        {
-            set => this.RaiseAndSetIfChanged(ref _velocity, value);
-            get => _velocity;
-        }
+        public float Velocity { get; set; }
 
         [Property("Shape")]
-        public float Shape
-        {
-            set => this.RaiseAndSetIfChanged(ref _shape, value);
-            get => _shape;
-        }
+        public float Shape { get; set; }
 
         [UnitProperty("Compensation", "ms")]
-        public float Compensation
-        {
-            set => this.RaiseAndSetIfChanged(ref _compensation, value);
-            get => _compensation;
-        }
+        public float Compensation { get; set; }
 
         public FilterStage FilterStage => FilterStage.PostTranspose;
     }

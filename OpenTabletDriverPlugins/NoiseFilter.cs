@@ -1,36 +1,32 @@
-using TabletDriverPlugin;
-using TabletDriverPlugin.Attributes;
-using TabletDriverPlugin.Tablet;
+using System.Numerics;
+using OpenTabletDriver.Plugin;
+using OpenTabletDriver.Plugin.Attributes;
+using OpenTabletDriver.Plugin.Tablet;
 
 namespace OpenTabletDriverPlugins
 {
     [PluginName("Anti-Noise")]
     public class NoiseFilter : Notifier, IFilter
     {
-        public Point Filter(Point point)
+        public Vector2 Filter(Vector2 point)
         {
-            var pt = new Point(point.X, point.Y);
-            if (_lastpos != null)
+            var pt = new Vector2(point.X, point.Y);
+            if (_lastpos.HasValue)
             {
-                var distance = point.DistanceFrom(_lastpos);
+                var distance = Vector2.Distance(point, _lastpos.Value);
                 if (distance < DistanceThreshold)
-                    pt = new Point(_lastpos.X, _lastpos.Y);
+                    pt = new Vector2(_lastpos.Value.X, _lastpos.Value.Y);
                 // Log.Debug($"Distance {distance} | Threshold {DistanceThreshold}");
             }
             _lastpos = pt;
             return pt;
         }
         
-        protected Point _lastpos;
+        protected Vector2? _lastpos;
 
-        private float _threshold;
 
         [SliderProperty("Distance Threshold", 0, 5, 2.5f)]
-        public float DistanceThreshold
-        {
-            set => this.RaiseAndSetIfChanged(ref _threshold, value);
-            get => _threshold;
-        }
+        public float DistanceThreshold { get; set; }
 
         public FilterStage FilterStage => FilterStage.PostTranspose;
     }
