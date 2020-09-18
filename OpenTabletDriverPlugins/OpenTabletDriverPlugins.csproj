@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="../.modules/OpenTabletDriver/OpenTabletDriver.Plugin/OpenTabletDriver.Plugin.csproj"/>
+    <PackageReference Include="OpenTabletDriver.Plugin" Version="0.4.0"/>
   </ItemGroup>
 
   <PropertyGroup>
