@@ -73,13 +73,13 @@ namespace OpenTabletDriverPlugins
         private float _reportRate, _reportRateAvg, _oldVelocity;
 
 
-        [UnitProperty("Velocity", "px/s")]
+        [Property("Velocity"), Unit("px/s")]
         public float Velocity { get; set; }
 
         [Property("Shape")]
         public float Shape { get; set; }
 
-        [UnitProperty("Compensation", "ms")]
+        [Property("Compensation"), Unit("ms")]
         public float Compensation { get; set; }
 
         public FilterStage FilterStage => FilterStage.PostTranspose;

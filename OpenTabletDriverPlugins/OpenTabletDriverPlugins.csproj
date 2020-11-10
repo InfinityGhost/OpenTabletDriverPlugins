@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="OpenTabletDriver.Plugin" Version="0.4.0"/>
+    <PackageReference Include="OpenTabletDriver.Plugin" Version="0.4.2"/>
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5</TargetFramework>
   </PropertyGroup>
 
 </Project>
